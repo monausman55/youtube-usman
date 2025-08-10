@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { exec } from "child_process";
+import youtubedl from "youtube-dl-exec"; // ✅ No binary install needed
 
 const app = express();
 app.use(cors());
@@ -8,20 +8,9 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Helper: run shell command and return stdout
-function runCmd(cmd, opts = {}) {
-  return new Promise((resolve, reject) => {
-    exec(cmd, { maxBuffer: 1024 * 1024 * 20, ...opts }, (err, stdout, stderr) => {
-      if (err) return reject(new Error(stderr || err.message));
-      resolve(stdout);
-    });
-  });
-}
-
-// Clean URL a bit (remove superfluous tracking params like ?si=...)
+// Clean URL a bit (remove ?si= tracking params)
 function sanitizeUrl(url) {
   if (!url) return url;
-  // keep only the first query string (safe approach). yt-dlp handles most URLs anyway.
   const idx = url.indexOf("?si=");
   if (idx !== -1) return url.slice(0, idx);
   return url;
@@ -34,17 +23,16 @@ app.get("/download", async (req, res) => {
   const url = sanitizeUrl(raw);
 
   try {
-    // Use yt-dlp to get all formats JSON for the single video (no playlist)
-    // --no-warnings to reduce noise; --no-playlist to avoid multiple JSONs
-    const cmd = `yt-dlp -J --no-warnings --no-playlist "${url.replace(/"/g, '\\"')}"`;
-    const out = await runCmd(cmd);
+    // ✅ Call yt-dlp via youtube-dl-exec
+    const info = await youtubedl(url, {
+      dumpSingleJson: true,
+      noWarnings: true,
+      noPlaylist: true,
+    });
 
-    const info = JSON.parse(out);
-
-    // collect formats
     const formats = Array.isArray(info.formats) ? info.formats : [];
 
-    // Helper filters
+    // Filters
     const isProgressiveMp4 = f =>
       f.url && f.ext === "mp4" && f.vcodec !== "none" && f.acodec !== "none" && !f.url.includes(".m3u8");
 
@@ -54,7 +42,7 @@ app.get("/download", async (req, res) => {
     const isAudioLike = f =>
       f.url && (f.ext === "mp3" || f.ext === "m4a" || f.ext === "webm" || (f.acodec && f.vcodec === "none"));
 
-    // Gather MP4 progressive formats (video+audio)
+    // MP4 progressive formats
     let mp4s = formats
       .filter(isProgressiveMp4)
       .map(f => ({
@@ -66,11 +54,7 @@ app.get("/download", async (req, res) => {
       }))
       .sort((a, b) => ( (b.height || 0) - (a.height || 0) ));
 
-    // If no progressive mp4s found, try to synthesize candidate mp4 links:
-    //  - pick mp4 video-only formats and provide their url (they are not muxed with audio)
-    //  - pick bestvideo and bestaudio combined url (note: that url is usually a chunked stream / may be m3u8)
     if (mp4s.length === 0) {
-      // try mp4 video-only + audio-only pairs (note: these are not single-file mp4s)
       const mp4VideoOnly = formats
         .filter(f => f.url && f.ext === "mp4" && f.vcodec !== "none" && (f.acodec === "none" || f.acodec === "none"))
         .map(f => ({
@@ -85,7 +69,7 @@ app.get("/download", async (req, res) => {
       mp4s = mp4VideoOnly;
     }
 
-    // M4A audio formats
+    // M4A formats
     let m4as = formats
       .filter(isM4a)
       .map(f => ({
@@ -96,7 +80,7 @@ app.get("/download", async (req, res) => {
       }))
       .sort((a, b) => ( (b.abr || 0) - (a.abr || 0) ));
 
-    // audio-like for MP3 fallback (prefer ext mp3, then m4a, then webm)
+    // Audio fallbacks
     let audios = formats
       .filter(isAudioLike)
       .map(f => ({
@@ -107,19 +91,17 @@ app.get("/download", async (req, res) => {
         url: f.url
       }))
       .sort((a, b) => {
-        // prefer mp3 > m4a > webm, then bitrate
         const order = ext => (ext === "mp3" ? 3 : ext === "m4a" ? 2 : ext === "webm" ? 1 : 0);
         return (order(b.ext) - order(a.ext)) || ((b.abr || 0) - (a.abr || 0));
       });
 
-    // Limit results (up to 5 each)
+    // Limit results
     mp4s = mp4s.slice(0, 5);
     m4as = m4as.slice(0, 5);
     audios = audios.slice(0, 5);
 
-    // Response
     res.json({
-      title: info.title || info.video_title || null,
+      title: info.title || null,
       id: info.id || null,
       thumbnail: info.thumbnail || null,
       duration: info.duration || null,
@@ -127,10 +109,10 @@ app.get("/download", async (req, res) => {
       m4a: m4as,
       audio_fallbacks: audios,
       note:
-        "Returned direct links if available. If mp4 progressive links are missing, video-only mp4 or chunked streams may be returned. Some formats (HLS/DASH) might still be m3u8 or segmented if the source doesn't provide progressive files."
+        "Returned direct links if available. If mp4 progressive links are missing, video-only mp4 or chunked streams may be returned."
     });
   } catch (err) {
-    console.error("yt-dlp error:", err.message || err);
+    console.error("yt-dlp error:", err);
     res.status(500).json({ error: "Failed to fetch formats", details: String(err.message || err) });
   }
 });
