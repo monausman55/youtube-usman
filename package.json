@@ -1,23 +1,13 @@
 {
-  "name": "youtube-direct-link-api",
+  "name": "yt-direct-links-api",
   "version": "1.0.0",
-  "description": "A Node.js API that returns direct YouTube download links using yt-dlp",
-  "main": "server.js",
   "type": "module",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": [
-    "youtube",
-    "yt-dlp",
-    "api",
-    "video",
-    "download",
-    "direct-link"
-  ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
-    "express": "^4.19.2"
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
   }
 }
