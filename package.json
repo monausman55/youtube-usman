@@ -1,21 +1,23 @@
 {
-  "name": "youtube-downloader-main",
+  "name": "youtube-direct-link-api",
   "version": "1.0.0",
-  "description": "",
+  "description": "A Node.js API that returns direct YouTube download links using yt-dlp",
   "main": "server.js",
-  "type": "module", 
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
   },
-  "keywords": [],
+  "keywords": [
+    "youtube",
+    "yt-dlp",
+    "api",
+    "video",
+    "download",
+    "direct-link"
+  ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^5.1.0",
-    "install": "^0.13.0",
-    "npm": "^11.5.2",
-    "youtube-dl-exec": "^3.0.23"
+    "express": "^4.19.2"
   }
 }
